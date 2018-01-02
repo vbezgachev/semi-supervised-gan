@@ -11,13 +11,21 @@ def get_loader(image_size, batch_size, num_workers):
         transforms.ToTensor(),
         normalize])
 
-    svnh = datasets.SVHN(root='./svnh', download=True, transform=transform)
+    svhn_train = datasets.SVHN(root='./svnh', download=True, transform=transform, split='train')
+    svhn_test = datasets.SVHN(root='./svnh', download=True, transform=transform, split='test')
 
-    svnh_loader = torch.utils.data.DataLoader(
-        dataset=svnh,
+    svhn_loader_train = torch.utils.data.DataLoader(
+        dataset=svhn_train,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers
     )
 
-    return svnh_loader
+    svhn_loader_test = torch.utils.data.DataLoader(
+        dataset=svhn_test,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers
+    )
+
+    return svhn_loader_train, svhn_loader_test

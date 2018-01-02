@@ -73,10 +73,6 @@ class Solver:
             x = x.cuda()
         return Variable(x)
 
-    def _reset_grad(self):
-        self.g_optimizer.zero_grad()
-        self.d_optimizer.zero_grad()
-
     def train(self):
         svhn_iter = iter(self.svhn_loader)
         iter_per_epoch = len(svhn_iter)
@@ -90,7 +86,6 @@ class Solver:
         label_mask = self._to_var(label_mask).long().squeeze()
 
         noise = torch.FloatTensor(self.batch_size, self.nz, 1, 1)
-        fixed_noise = torch.FloatTensor(self.batch_size, self.nz, 1, 1).normal_(0, 1)
 
         for step in range(1, self.epochs + 1):
             # reset data iterator for each epoch
@@ -106,8 +101,8 @@ class Solver:
             # -------------- train discriminator --------------
 
             # train with real images
-            self._reset_grad()
-            _, d_class_logits_on_data, d_gan_logits_real, _ = self.discriminator(svhn_data)
+            self.d_optimizer.zero_grad()
+            _, d_class_logits_on_data, d_gan_logits_real, d_sample_features = self.discriminator(svhn_data)
             d_gan_labels_real = self._to_var(torch.ones_like(d_gan_logits_real.data))
             d_gan_loss_real = torch.mean(
                 d_gan_criterion(
@@ -119,7 +114,10 @@ class Solver:
             noise.resize_(self.batch_size, self.nz, 1, 1).normal_(0, 1)
             noise_var = self._to_var(noise)
             fake = self.generator(noise_var)
-            _, _, d_gan_logits_fake, _ = self.discriminator(fake)
+
+            # call detach() to avoid backprop for generator here
+            _, _, d_gan_logits_fake, _ = self.discriminator(fake.detach())
+
             d_gan_labels_fake = self._to_var(torch.zeros_like(d_gan_logits_fake.data))
             d_gan_loss_fake = torch.mean(
                 d_gan_criterion(
@@ -136,7 +134,29 @@ class Solver:
             d_class_loss = torch.sum(label_mask * d_class_loss_entropy) / torch.max(1, torch.sum(label_mask))
             
             d_loss = d_gan_loss + d_class_loss
+            d_loss.backward()
+            self.d_optimizer.step()
 
-            # -------------- train generator --------------
+            # -------------- update generator --------------
             
-            # TODO
+            self.g_optimizer.zero_grad()
+
+            # call discriminator again to do backprop for generator here
+            _, _, _, d_features_on_data = self.discriminator(fake)
+            
+            # Here we set `g_loss` to the "feature matching" loss invented by Tim Salimans at OpenAI.
+            # This loss consists of minimizing the absolute difference between the expected features
+            # on the data and the expected features on the generated samples.
+            # This loss works better for semi-supervised learning than the tradition GAN losses.
+            data_features_mean = torch.mean(d_features_on_data, dim=0)
+            sample_features_mean = torch.mean(d_sample_features, dim=0)
+            
+            g_loss = torch.mean(torch.abs(data_features_mean - sample_features_mean))
+
+            pred_class = torch.max(d_class_logits_on_data, 1).long()
+            eq = torch.eq(svhn_labels, pred_class)
+            correct = torch.sum(eq.float())
+            masked_correct = torch.sum(label_mask * correct)
+
+            print('Training:\tepoch {}/{}\tdiscr. gan loss {}\tdiscr. class loss {}\tgen loss {}\tmasked correct {}'.
+                      format(step, self.epochs, d_gan_loss, d_class_loss, g_loss, masked_correct))
