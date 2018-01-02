@@ -36,7 +36,7 @@ class _netG(nn.Module):
         self.deconv1 = deconv(
             c_in=num_noise_channels,
             c_out=size_mult * 4,
-            k_size=5,
+            k_size=4,
             stride=1,
             pad=0)
         # (size_mult * 4) x 4 x 4
@@ -44,19 +44,19 @@ class _netG(nn.Module):
         self.deconv2 = deconv(
             c_in=size_mult * 4,
             c_out=size_mult * 2,
-            k_size=5)
+            k_size=4)
         # (size_mult * 2) x 8 x 8
 
         self.deconv3 = deconv(
             c_in=size_mult * 2,
             c_out=size_mult * 1,
-            k_size=5)
+            k_size=4)
         # (size_mult) x 16 x 16
 
         self.deconv4 = deconv(
             c_in=size_mult,
             c_out=num_output_channels,
-            k_size=5,
+            k_size=4,
             bn=False)
         # (num_output_channels) x 16 x 16
 
@@ -134,10 +134,6 @@ class _netD(nn.Module):
             in_features=(size_mult * 2) * 1 * 1,
             out_features=num_classes)
 
-        self.gan_logits = nn.Linear(
-            in_features=num_classes,
-            out_features=1)
-
     def forward(self, inputs):
         out = F.dropout2d(inputs, p=self.drop_rate/2.5)
 
@@ -156,16 +152,16 @@ class _netD(nn.Module):
         out = F.leaky_relu(self.conv6(out), self.lrelu_alpha)
 
         features = self.features(out)
+        features = features.squeeze()
 
         class_logits = self.class_logits(features)
 
         # calculate gan logits
-        max_val = torch.max(input=class_logits, dim=1, keep_dims=True)
+        max_val, _ = torch.max(class_logits, 1, keepdim=True)
         stable_class_logits = class_logits - max_val
         max_val = torch.squeeze(max_val)
         gan_logits = torch.log(torch.sum(torch.exp(stable_class_logits), 1)) + max_val
-        self.gan_logits(gan_logits)
 
-        out = F.softmax(class_logits)
+        out = F.softmax(class_logits, dim=0)
 
         return out, class_logits, gan_logits, features
