@@ -88,6 +88,11 @@ class Solver:
         noise = torch.FloatTensor(self.batch_size, self.nz, 1, 1)
 
         for epoch in range(1, self.epochs + 1):
+            masked_correct = 0
+            num_samples = 0
+            total_count_samples = 0
+            loop_count = 0
+
             for _, data in enumerate(self.svhn_loader_train):
                 # load svhn dataset
                 svhn_data, svhn_labels, label_mask = data
@@ -159,19 +164,31 @@ class Solver:
                 _, pred_class = torch.max(d_class_logits_on_data, 1)
                 eq = torch.eq(svhn_labels, pred_class)
                 correct = torch.sum(eq.float())
-                masked_correct = torch.sum(label_mask * eq.float())
+                masked_correct += torch.sum(label_mask * eq.float())
+                num_samples += torch.sum(label_mask)
 
                 g_loss.backward()
                 self.g_optimizer.step()
 
-                print('Training:\tepoch {}/{}\tdiscr. gan loss {}\tdiscr. class loss {}\tgen loss {}\tmasked correct {}'.
-                        format(epoch, self.epochs, d_gan_loss.data[0], d_class_loss.data[0], g_loss.data[0], masked_correct.data[0]))
+                total_count_samples += len(svhn_labels)
+                loop_count += 1
+                if loop_count%10 == 0:
+                    print('Training:\tepoch {}/{}\tdiscr. gan loss {}\tdiscr. class loss {}\tgen loss {}\tsamples {}/{}'.
+                            format(epoch, self.epochs, d_gan_loss.data[0], d_class_loss.data[0], g_loss.data[0], 
+                                total_count_samples, len(self.svhn_loader_train)))
+                    
+            accuracy = masked_correct.data[0]/max(1.0, num_samples.data[0])
+            print('Training:\tepoch {}/{}\taccuracy {}'.format(epoch, self.epochs, accuracy))
 
+            total_count_samples = 0
+            correct = 0
+            num_samples = 0
+            loop_count = 0
             for _, data in enumerate(self.svhn_loader_test):
                 # load svhn dataset
                 svhn_data, svhn_labels = data
                 svhn_data = self._to_var(svhn_data)
-                svhn_labels = self._to_var(svhn_labels).long().squeeze()
+                svhn_labels = svhn_labels.long().squeeze()
 
                 # -------------- train discriminator --------------
 
@@ -179,8 +196,16 @@ class Solver:
                 d_out, _, _, _ = self.discriminator(svhn_data)
                 _, pred_idx = torch.max(d_out.data, 1)
                 eq = torch.eq(svhn_labels, pred_idx)
-                correct = torch.sum(eq.float())
+                correct += torch.sum(eq.float())
+                num_samples += len(svhn_labels)
                 
-                print('Test:\tepoch {}/{}\tcorrect {}'.format(epoch, self.epochs, correct))
+                total_count_samples += len(svhn_labels)
+                loop_count += 1
+                if loop_count%10 == 0:
+                    print('Test:\tepoch {}/{}\tsamples {}/{}'.format(
+                        epoch, self.epochs, total_count_samples, len(self.svhn_loader_test)))
+                
+            accuracy = correct/max(1.0, 1.0 * num_samples)
+            print('Test:\tepoch {}/{}\taccuracy {}'.format(epoch, self.epochs, accuracy))
 
             # TODO: save checkpoints and the best model weights
