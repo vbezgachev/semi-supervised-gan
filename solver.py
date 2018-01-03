@@ -145,13 +145,13 @@ class Solver:
                 self.g_optimizer.zero_grad()
 
                 # call discriminator again to do backprop for generator here
-                _, _, _, d_features_on_data = self.discriminator(fake)
+                _, _, _, d_data_features = self.discriminator(fake)
                 
                 # Here we set `g_loss` to the "feature matching" loss invented by Tim Salimans at OpenAI.
                 # This loss consists of minimizing the absolute difference between the expected features
                 # on the data and the expected features on the generated samples.
                 # This loss works better for semi-supervised learning than the tradition GAN losses.
-                data_features_mean = torch.mean(d_features_on_data, dim=0)
+                data_features_mean = torch.mean(d_data_features, dim=0)
                 sample_features_mean = torch.mean(d_sample_features.detach(), dim=0)
                 
                 g_loss = torch.mean(torch.abs(data_features_mean - sample_features_mean))
