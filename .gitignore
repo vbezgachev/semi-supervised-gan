@@ -9,4 +9,5 @@ export/
 .vscode/
 *.pkl
 svhn/
+cifar10/
 *.mat
