@@ -2,6 +2,7 @@
 
 checkpoints*/
 .ipynb_checkpoints/
+dcgan_model/
 data/
 __pycache__/
 export/
