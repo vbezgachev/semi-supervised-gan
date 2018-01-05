@@ -10,4 +10,5 @@ export/
 *.pkl
 svhn/
 cifar10/
+train_out/
 *.mat
