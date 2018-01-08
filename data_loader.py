@@ -1,17 +1,37 @@
+'''
+Defines the dataset and loader for the SVHN images
+'''
+import numpy as np
 import torch
-from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Dataset
-from torch.autograd import Variable
+from torchvision import datasets, transforms
+
 
 class SvhnDataset(Dataset):
-    def __init__(self, image_size, split):
+    '''
+    The dataset class is, effectively, an iterator over the data.
+    As training data we have images, labels and masks to use only a limited number of labels.
+    As test data we have images and labels
+    '''
+    def __init__(self, image_size, split, dir_root, use_gpu):
+        '''
+        :param image_size: required image size. The images are resized to match the size
+        :param split: defines train or test split
+        :param dir_root: directory root to store loaded data
+        :param use_gpu: indication to use the GPU
+        '''
         self.split = split
-        self.use_gpu = True if torch.cuda.is_available() else False
-
-        self.svhn_dataset = self._create_dataset(image_size, split)
+        self.dir_root = dir_root
+        self.use_gpu = use_gpu
+        self.svhn_dataset = self._create_dataset(image_size)
         self.label_mask = self._create_label_mask()
 
-    def _create_dataset(self, image_size, split):
+    def _create_dataset(self, image_size):
+        '''
+        Loads the dataset, normalizes and resizes images
+
+        :param image_size: required image size
+        '''
         normalize = transforms.Normalize(
             mean=[0.5, 0.5, 0.5],
             std=[0.5, 0.5, 0.5])
@@ -19,17 +39,24 @@ class SvhnDataset(Dataset):
             transforms.Resize(image_size),
             transforms.ToTensor(),
             normalize])
-        return datasets.SVHN(root='./svhn', download=True, transform=transform, split=split)
+        return datasets.SVHN(root=self.dir_root, download=True,
+                             transform=transform, split=self.split)
 
     def _is_train_dataset(self):
+        '''
+        Returns True if this is a train dataset, False - otherwise
+        '''
         return True if self.split == 'train' else False
 
     def _create_label_mask(self):
+        '''
+        Creates a mask array to use only a limited number of labels during the training
+        '''
         if self._is_train_dataset():
-            label_mask = torch.zeros(len(self.svhn_dataset)).float()
+            label_mask = np.zeros(len(self.svhn_dataset))
             label_mask[0:1000] = 1
-            if self.use_gpu:
-                label_mask = label_mask.cuda()
+            np.random.shuffle(label_mask)
+            label_mask = torch.LongTensor(label_mask)
             return label_mask
         return None
 
@@ -42,11 +69,15 @@ class SvhnDataset(Dataset):
             return data, label, self.label_mask[idx]
         return data, label
 
-def get_loader(image_size, batch_size):
+
+def create_loaders(image_size, batch_size, dir_root, use_gpu):
+    '''
+    Creates loaders for train and test datasets
+    '''
     num_workers = 1
 
-    svhn_train = SvhnDataset(image_size=image_size, split='train')
-    svhn_test = SvhnDataset(image_size=image_size, split='test')
+    svhn_train = SvhnDataset(image_size, 'train', dir_root, use_gpu)
+    svhn_test = SvhnDataset(image_size, 'test', dir_root, use_gpu)
 
     svhn_loader_train = DataLoader(
         dataset=svhn_train,
