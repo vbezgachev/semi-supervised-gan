@@ -70,11 +70,11 @@ class SvhnDataset(Dataset):
         return data, label
 
 
-def create_loaders(image_size, batch_size, dir_root, use_gpu):
+def create_loaders(image_size, batch_size, dir_root, num_workers):
     '''
     Creates loaders for train and test datasets
     '''
-    num_workers = 1
+    use_gpu = True if torch.cuda.is_available() else False
 
     svhn_train = SvhnDataset(image_size, 'train', dir_root, use_gpu)
     svhn_test = SvhnDataset(image_size, 'test', dir_root, use_gpu)
